@@ -657,6 +657,24 @@ def main():
         print(f"ERROR: {ffmpeg_bin} not found.", file=sys.stderr)
         sys.exit(1)
 
+    is_gbr_output = pix_fmt.startswith('gbrp')
+    output_colorspace = 'gbr' if is_gbr_output else 'bt2020nc'
+    output_primaries = 'bt709' if is_gbr_output else 'bt2020'
+    output_transfer = 'bt709' if is_gbr_output else 'smpte2084'
+
+    x265_params = [
+        'repeat-headers=1',
+        f'colorprim={output_primaries}',
+        f'transfer={output_transfer}',
+        f'colormatrix={output_colorspace}',
+    ]
+    if not is_gbr_output:
+        x265_params.insert(0, 'hdr-opt=1')
+        x265_params.extend([
+            'master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1)',
+            'max-cll=1000,400',
+        ])
+
     ffmpeg_cmd = [
         ffmpeg_bin, '-y',
         '-f', 'rawvideo',
@@ -668,18 +686,19 @@ def main():
         '-preset', 'ultrafast',
         '-crf', '20',
         '-pix_fmt', pix_fmt,
-        '-color_primaries', 'bt2020',
-        '-color_trc', 'smpte2084',
-        '-colorspace', 'bt2020nc',
+        '-color_primaries', output_primaries,
+        '-color_trc', output_transfer,
         '-x265-params',
-        'hdr-opt=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:'
-        'master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):'
-        'max-cll=1000,400',
+        ':'.join(x265_params),
         '-movflags', '+faststart',
         output_path
     ]
+    if not is_gbr_output:
+        ffmpeg_cmd[ffmpeg_cmd.index('-x265-params'):ffmpeg_cmd.index('-x265-params')] = [
+            '-colorspace', output_colorspace,
+        ]
     print(f"FFmpeg command: {' '.join(ffmpeg_cmd[:5])} ... {output_path}")
-    pipe = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    pipe = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
     random.seed(42)
     np.random.seed(42)
@@ -750,10 +769,14 @@ def main():
             last_report = now
 
     pipe.stdin.close()
+    pipe.stdin = None
     print("\nWaiting for ffmpeg to finalize (faststart moov relocation)...")
-    pipe.wait()
+    _, stderr_output = pipe.communicate()
     if pipe.returncode != 0:
-        print(f"WARNING: ffmpeg exited with code {pipe.returncode}", file=sys.stderr)
+        if stderr_output:
+            print(stderr_output.decode('utf-8', errors='replace'), file=sys.stderr)
+        print(f"ERROR: ffmpeg exited with code {pipe.returncode}", file=sys.stderr)
+        sys.exit(pipe.returncode)
     wt = time_mod.time() - wall_start
     print(f"\nDone! {output_path}")
     print(f"Wall time: {wt/60:.1f} min ({wt/3600:.1f} h)")
