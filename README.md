@@ -9,7 +9,9 @@ A Python script that generates test videos featuring bouncing, shape-shifting ba
 - **140+ background patterns** (gradients, checkerboards, stripes, dots, plasma, brick, sunburst, noise, etc.) shuffled and switched every 10 seconds
 - **3×3 grid overlay** for visual alignment testing
 - **Centered timer** with shadow for readability
-- **HDR metadata**: BT.2020 color primaries, PQ (SMPTE 2084) transfer, mastering display info
+- **Color metadata by format**:
+   - YUV outputs use HDR signaling (BT.2020 + PQ/SMPTE 2084 + mastering display metadata)
+   - GBR outputs use RGB signaling (`gbr` matrix with BT.709 primaries/transfer)
 - **Configurable**: resolution, frame rate, duration, pixel format
 
 ## Requirements
@@ -75,7 +77,9 @@ Any format supported by FFmpeg's libx265 encoder, including:
    - Renders a centered elapsed-time timer (HH:MM:SS.cc)
    - Writes the raw BGR24 frame to FFmpeg's stdin pipe
 
-4. **Encoding**: FFmpeg encodes the raw frames using libx265 (ultrafast preset, CRF 20) with full HDR metadata into an MP4 container.
+4. **Encoding**: FFmpeg encodes the raw frames using libx265 (ultrafast preset, CRF 20) into MP4.
+   - YUV pixel formats are tagged as HDR (BT.2020/PQ)
+   - GBR pixel formats are tagged as RGB/BT.709 (`colormatrix=gbr`)
 
 ## Performance
 
